@@ -1,0 +1,7 @@
+# DECISIONS.md
+
+1. **Indexes.** `employees.emp_code` is unique. The employee department/joined-date indexes support headcount and department explain queries. `attendance_logs.(emp_code,date)` is unique and enforces one daily record. The date/employee index supports attendance listing, the punch lookup index supports closing the latest open record, and the date/status/employee index supports analytics filters. I considered a text index for names, but no endpoint searches names, so it would add write cost without serving a query.
+2. **Punch-in race.** Both requests may read the employee, but only one insert can win the unique `(emp_code,date)` index. The losing insert raises `DuplicateKeyError` and becomes a 409. There is no check-then-insert race in the write itself.
+3. **Ties.** Rows are grouped and sorted by total late minutes. The rank is the 1-based position for a new value, or the previous rank for a tie. Filtering happens after rank calculation, so every employee tied at the cutoff rank is returned.
+4. **Headcount.** Department summary starts from employees whose `joined_on` is within the month, then uses `$lookup` into logs with `preserveNullAndEmptyArrays`. An employee with no matching log still reaches the department group.
+5. **At 100x data.** I would precompute daily department facts asynchronously and partition or archive old attendance data, while retaining the raw logs for auditability.
